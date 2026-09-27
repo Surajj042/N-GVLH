@@ -9,22 +9,16 @@ export interface IPurchase extends Document {
   updatedAt: Date;
 }
 
-const PurchaseSchema = new Schema(
-  {
-    userId: { type: String, required: true },
-    courseId: { type: Schema.Types.ObjectId, ref: "Course", required: true },
-    price: { type: Number },
-    // course: { type: Schema.Types.ObjectId, ref: "Course", required: true },
-    createdAt: { type: Date, default: Date.now },
-    updatedAt: { type: Date, default: Date.now },
-  }
-  //  {
-  //   indexes: [
-  //     { fields: { courseId: 1 } },
-  //     { fields: { userId: 1, courseId: 1 }, unique: true },
-  //   ],
-  // }
-);
+const PurchaseSchema = new Schema({
+  userId: { type: String, required: true },
+  courseId: { type: Schema.Types.ObjectId, ref: "Course", required: true },
+  price: { type: Number },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+});
+
+PurchaseSchema.index({ courseId: 1 });
+PurchaseSchema.index({ userId: 1, courseId: 1 }, { unique: true });
 
 const Purchase =
   models.Purchase || model<IPurchase>("Purchase", PurchaseSchema);

@@ -9,6 +9,8 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { Categories } from "./_components/categories";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   authors: [
     {

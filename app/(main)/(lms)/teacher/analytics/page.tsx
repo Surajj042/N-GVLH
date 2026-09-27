@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { Chart } from "./_components/chart";
 import { DataCard } from "./_components/data-card";
 
+export const dynamic = "force-dynamic";
+
 const AnalyticsPage = async () => {
 
   const { userId } = await auth();

@@ -7,6 +7,8 @@ import { CoursesList } from "@/components/courses-list";
 import { getDashboardCourses } from "@/lib/actions/course.action";
 import { auth } from "@clerk/nextjs/server";
 
+export const dynamic = "force-dynamic";
+
 export default async function Dashboard() {
   const { userId } = await auth();
 

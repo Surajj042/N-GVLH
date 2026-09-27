@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit --incremental false",
     "test": "tsx --test tests/**/*.test.ts",
-    "seed": "tsx --env-file=.env.local scripts/seed.ts"
+    "seed": "tsx --env-file=.env.local scripts/seed.ts",
+    "migrate:integrity": "tsx --env-file=.env.local migrations/001-integrity-indexes.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.8.3",

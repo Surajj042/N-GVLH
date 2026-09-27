@@ -6,6 +6,8 @@ import { getQuestionByTagId, getTagById } from "@/lib/actions/tag.action";
 import { URLProps } from "@/types";
 import { Suspense } from "react";
 
+export const dynamic = "force-dynamic";
+
 const TagDetails = async ({ params, searchParams }: URLProps) => {
   const { id } = await params;
   const resolvedSearchParams = await searchParams;

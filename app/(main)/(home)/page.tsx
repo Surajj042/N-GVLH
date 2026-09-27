@@ -9,6 +9,9 @@ import { getUserInfo, syncClerkUser } from "@/lib/actions/user.action";
 import { auth } from "@clerk/nextjs/server";
 import DashboardSection from "./_components/dashboard-section";
 import EmptyDashboard from "./_components/empty-dashboard";
+
+export const dynamic = "force-dynamic";
+
 /**
  * Function to render the dashboard for a user.
  * Retrieves the user's completed and in-progress courses, user information, questions, and answers.

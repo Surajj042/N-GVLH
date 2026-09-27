@@ -6,6 +6,8 @@ import { redirect } from "next/navigation";
 import { columns } from "./_components/columns";
 import { DataTable } from "./_components/data-table";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   authors: [
     {

@@ -23,6 +23,8 @@ import { DescriptionForm } from "./_components/description-form";
 import { ImageForm } from "./_components/image-form";
 import PriceForm from "./_components/price-form";
 
+export const dynamic = "force-dynamic";
+
 const CourseIdPage = async ({
   params,
 }: {

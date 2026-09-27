@@ -11,6 +11,8 @@ import Link from "next/link";
 import { ImageForm } from "./_components/image-form";
 import { MemberRoleForm } from "./_components/member-role-form";
 
+export const dynamic = "force-dynamic";
+
 interface ProfileIdPageProps {
   params: Promise<{
     id: string;

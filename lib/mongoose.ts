@@ -1,10 +1,12 @@
 import mongoose from "mongoose";
 
-const MONGODB_URL = process.env.MONGODB_URL;
-
-if (!MONGODB_URL) {
-  throw new Error("Missing MONGODB_URL environment variable");
-}
+const getMongoUrl = (): string => {
+  const url = process.env.MONGODB_URL;
+  if (!url) {
+    throw new Error("Missing MONGODB_URL environment variable");
+  }
+  return url;
+};
 
 declare global {
   var mongooseCache:
@@ -25,7 +27,7 @@ export const connectToDatabase = async (): Promise<typeof mongoose> => {
 
   if (!cached.promise) {
     cached.promise = mongoose
-      .connect(MONGODB_URL, {
+      .connect(getMongoUrl(), {
         dbName: "n-gvlh",
         serverSelectionTimeoutMS: 10000,
       })

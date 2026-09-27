@@ -2,6 +2,8 @@ import Question from "@/components/forms/Question";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+
 const AskQuestion = async () => {
   const { userId } = await auth();
 

@@ -70,7 +70,6 @@ export async function PUT(
       {
         $set: {
           isCompleted: parsed.data.isCompleted,
-          chapter: chapterId,
         },
       },
       { upsert: true, new: true, setDefaultsOnInsert: true },

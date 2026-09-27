@@ -20,6 +20,8 @@ import Link from "next/link";
 import Component from "../../announcement/_components/CustomCard";
 import FollowButton from "./_components/FollowButton";
 
+export const dynamic = "force-dynamic";
+
 const Profile = async ({ params, searchParams }: URLProps) => {
   const { id } = await params;
   const resolvedSearchParams = await searchParams;

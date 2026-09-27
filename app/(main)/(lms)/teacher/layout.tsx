@@ -4,6 +4,8 @@ import { Metadata } from "next";
 import { redirect } from "next/navigation";
 import React from "react";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   authors: [
     {
@@ -24,6 +26,8 @@ export const metadata: Metadata = {
 
 const DashboardLayout = async ({ children }: { children: React.ReactNode }) => {
   const { userId } = await auth();
+  if (!userId) redirect("/get-started");
+
   const checkTeacher = await isTeacher({ userId: userId });
   if (!checkTeacher) redirect("/get-started");
   return (

@@ -6,6 +6,8 @@ import { redirect } from "next/navigation";
 import { CourseMobileSidebar } from "./_components/course-mobile-sidebar";
 import { CourseSidebar } from "./_components/course-sidebar";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   authors: [
     {

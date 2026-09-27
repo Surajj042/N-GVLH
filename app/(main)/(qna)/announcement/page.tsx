@@ -8,6 +8,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import Component from "./_components/CustomCard";
 
+export const dynamic = "force-dynamic";
+
 // const IssueForm = dynamic(
 //   () => import("@/app/(main)/(qna)/announcement/_components/IssueForm"),
 //   {
