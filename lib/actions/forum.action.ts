@@ -4,7 +4,8 @@ import Forum, { IAnnouncement, IForum } from "@/database/forum.modal";
 import User, { IUser } from "@/database/user.modal";
 import mongoose from "mongoose";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { requireUser } from "@/lib/authz";
+import { safePath } from "@/lib/security";
 import { connectToDatabase } from "../mongoose";
 
 interface CreateForumParams {
@@ -14,28 +15,16 @@ interface CreateForumParams {
 
 interface FollowForumParams {
   teacherClerkId: string;
-  studentId: string;
   path: string;
 }
 
-interface AddAnnouncementInForumsParams {
-  forumId: string;
-  title: string;
-  description: string;
-}
-
 interface AddAnnouncementParams {
-  userId: string;
   title: string;
   description: string;
 }
 
 interface GetAnnouncementsParams {
   studentId: string;
-}
-interface EditAnnouncementsParams {
-  teacherId: string;
-  announcementId: string;
 }
 
 /**
@@ -49,7 +38,7 @@ export async function createForum(params: CreateForumParams) {
     await connectToDatabase();
 
     const { teacherId, title: forumTitle } = params;
-    const teacher = await User?.findOne({ clerkId: teacherId });
+    const teacher = await User.findOne({ clerkId: teacherId });
 
     if (!teacher || teacher.role !== "TEACHER") {
       throw new Error("Invalid teacher");
@@ -57,14 +46,18 @@ export async function createForum(params: CreateForumParams) {
 
     const title = forumTitle ?? `${teacher.name}'s Forum`;
 
-    const forumData = {
+    const existingForum = await Forum.findOne({ teacherId: teacher._id });
+
+    if (existingForum) {
+      return existingForum;
+    }
+
+    const forum = await Forum.create({
       title,
       teacherId: teacher._id,
       announcements: [],
       followers: [],
-    };
-
-    const forum = await Forum.create(forumData);
+    });
 
     return forum;
   } catch (error) {
@@ -74,22 +67,23 @@ export async function createForum(params: CreateForumParams) {
 
 export async function followForum(params: FollowForumParams) {
   try {
-    const { teacherClerkId, studentId, path } = params;
+    const student = await requireUser();
 
-    if (!studentId) {
-      redirect("/sign-in");
-    }
+    const { teacherClerkId, path } = params;
 
     await connectToDatabase();
 
-    const teacher = await User?.findOne({
+    const teacher = await User.findOne({
       clerkId: teacherClerkId,
       role: "TEACHER",
     });
 
-    const student = await User.findOne({ clerkId: studentId });
-    if (!student) {
-      throw new Error("Invalid student");
+    if (!teacher) {
+      throw new Error("Forum not found");
+    }
+
+    if (String(teacher._id) === String(student._id)) {
+      throw new Error("You cannot follow your own forum");
     }
 
     const forum = await Forum.findOne({ teacherId: teacher._id });
@@ -97,17 +91,23 @@ export async function followForum(params: FollowForumParams) {
       throw new Error("Forum not found");
     }
 
-    if (!forum.followers.includes(student._id)) {
-      forum.followers.push(student._id);
-      await forum.save();
-      revalidatePath(path);
-    } else {
-      forum.followers = forum.followers.filter(
-        (followerId) => followerId.toString() !== student._id.toString(),
+    const alreadyFollowing = forum.followers.some(
+      (followerId) => String(followerId) === String(student._id),
+    );
+
+    if (alreadyFollowing) {
+      await Forum.updateOne(
+        { _id: forum._id },
+        { $pull: { followers: student._id } },
       );
-      await forum.save();
-      revalidatePath(path);
+    } else {
+      await Forum.updateOne(
+        { _id: forum._id },
+        { $addToSet: { followers: student._id } },
+      );
     }
+
+    revalidatePath(safePath(path));
   } catch (error) {
     throw error;
   }
@@ -151,31 +151,35 @@ export async function isFollowing({
  */
 export async function addAnnouncement(params: AddAnnouncementParams) {
   try {
-    const teacherId = params.userId;
-    if (!teacherId) {
-      throw new Error("User not logged in");
+    const teacher = await requireUser();
+
+    if (teacher.role !== "TEACHER") {
+      throw new Error("You are not authorized to make this announcement");
     }
+
     const { title, description } = params;
+
+    if (typeof title !== "string" || !title.trim() || title.length > 255) {
+      throw new Error("Invalid announcement title");
+    }
+
+    if (
+      typeof description !== "string" ||
+      !description.trim() ||
+      description.length > 65535
+    ) {
+      throw new Error("Invalid announcement description");
+    }
 
     await connectToDatabase();
 
-    const teacher = await User.findOne({ clerkId: teacherId, role: "TEACHER" });
+    const forum = await Forum.findOneAndUpdate(
+      { teacherId: teacher._id },
+      { $push: { announcements: { title, description } } },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
 
-    const forum = await Forum.findOne({ teacherId: teacher._id });
-
-    if (!forum) {
-      if (!forum && teacher) {
-        const newForum = await createForum({ teacherId: teacherId });
-        newForum.announcements.push({ title, description });
-        await newForum.save();
-      }
-    } else {
-      if (!teacher._id.equals(forum.teacherId)) {
-        throw new Error("You are not authorized to make this announcement");
-      }
-      forum.announcements.push({ title, description });
-      await forum.save();
-    }
+    return forum;
   } catch (error) {
     throw error;
   }
@@ -293,7 +297,6 @@ async function deleteAnnouncementByTitle({
   announcementTitle: string;
 }) {
   try {
-    // Find the forum by ID and remove the announcement from the array by title
     const updatedForum = await Forum.findOneAndUpdate(
       { _id: forumId },
       { $pull: { announcements: { title: announcementTitle } } },
@@ -311,13 +314,16 @@ async function deleteAnnouncementByTitle({
     throw error;
   }
 }
+
 export async function editAnnouncement(
-  userId: string,
   announcementId: mongoose.Types.ObjectId,
-  updatedFields: Partial<IAnnouncement>,
+  updatedFields: Partial<Pick<IAnnouncement, "title" | "description">>,
 ): Promise<void> {
   try {
-    // Step 1: Find the forum containing the announcement
+    const actor = await requireUser();
+
+    await connectToDatabase();
+
     const forum: IForum | null = await Forum.findOne({
       "announcements._id": announcementId,
     }).exec();
@@ -326,21 +332,43 @@ export async function editAnnouncement(
       throw new Error("Forum not found");
     }
 
-    const announcementIndex = forum.announcements.findIndex((announcement) =>
-      announcement._id!.equals(announcementId),
+    if (String(forum.teacherId) !== String(actor._id)) {
+      throw new Error("You are not authorized to edit this announcement");
+    }
+
+    const announcementIndex = forum.announcements.findIndex(
+      (announcement) => announcement._id!.equals(announcementId),
     );
 
     if (announcementIndex === -1) {
       throw new Error("Announcement not found");
     }
 
-    // Step 3: Update the announcement fields
+    if (updatedFields.title !== undefined) {
+      if (
+        typeof updatedFields.title !== "string" ||
+        !updatedFields.title.trim() ||
+        updatedFields.title.length > 255
+      ) {
+        throw new Error("Invalid announcement title");
+      }
+    }
+
+    if (updatedFields.description !== undefined) {
+      if (
+        typeof updatedFields.description !== "string" ||
+        !updatedFields.description.trim() ||
+        updatedFields.description.length > 65535
+      ) {
+        throw new Error("Invalid announcement description");
+      }
+    }
+
     forum.announcements[announcementIndex] = {
       ...forum.announcements[announcementIndex],
       ...updatedFields,
     };
 
-    // Step 4: Save the changes to the database
     await forum.save();
 
     console.log("Announcement updated successfully");

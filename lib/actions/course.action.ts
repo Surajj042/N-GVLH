@@ -1,5 +1,7 @@
 "use server";
 
+import mongoose from "mongoose";
+
 import Category from "@/database/category.modal";
 import Chapter from "@/database/chapter.modal";
 import Course from "@/database/course.modal";
@@ -152,6 +154,10 @@ export async function getCourseWithChaptersAndProgress(
   userId: string,
 ) {
   try {
+    if (!mongoose.isValidObjectId(courseId)) {
+      throw new Error("Course not found");
+    }
+
     await connectToDatabase();
     // Fetch the course by ID — lean() returns plain object, no toObject() needed
     const course: any = await Course.findById(courseId).lean();

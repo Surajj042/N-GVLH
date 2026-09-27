@@ -1,7 +1,6 @@
 "use client";
 
 import { downvoteAnswer, upvoteAnswer } from "@/lib/actions/answer.action";
-import { viewQuestion } from "@/lib/actions/interaction.action";
 import {
   downvoteQuestion,
   upvoteQuestion,
@@ -9,8 +8,8 @@ import {
 import { toggleSaveQuestion } from "@/lib/actions/user.action";
 import { formatAndDivideNumber } from "@/lib/utils";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { toast } from "../ui/use-toast";
 
 interface Props {
@@ -34,12 +33,10 @@ const Votes = ({
   hasdownVoted,
   hasSaved,
 }: Props) => {
-  const router = useRouter();
   const pathname = usePathname();
   const handleSave = async () => {
     await toggleSaveQuestion({
-      userId: JSON.parse(userId),
-      questionId: JSON.parse(itemId),
+      questionId: itemId,
       path: pathname,
     });
 
@@ -62,18 +59,12 @@ const Votes = ({
     if (action === "upvote") {
       if (type === "Question") {
         await upvoteQuestion({
-          questionId: JSON.parse(itemId),
-          userId: JSON.parse(userId),
-          hasupVoted,
-          hasdownVoted,
+          questionId: itemId,
           path: pathname,
         });
       } else if (type === "Answer") {
         await upvoteAnswer({
-          answerId: JSON.parse(itemId),
-          userId: JSON.parse(userId),
-          hasupVoted,
-          hasdownVoted,
+          answerId: itemId,
           path: pathname,
         });
       }
@@ -87,18 +78,12 @@ const Votes = ({
     if (action === "downvote") {
       if (type === "Question") {
         await downvoteQuestion({
-          questionId: JSON.parse(itemId),
-          userId: JSON.parse(userId),
-          hasupVoted,
-          hasdownVoted,
+          questionId: itemId,
           path: pathname,
         });
       } else if (type === "Answer") {
         await downvoteAnswer({
-          answerId: JSON.parse(itemId),
-          userId: JSON.parse(userId),
-          hasupVoted,
-          hasdownVoted,
+          answerId: itemId,
           path: pathname,
         });
       }
@@ -109,13 +94,6 @@ const Votes = ({
       });
     }
   };
-
-  useEffect(() => {
-    viewQuestion({
-      questionId: JSON.parse(itemId),
-      userId: userId ? JSON.parse(userId) : undefined,
-    });
-  }, [itemId, userId, pathname]);
 
   const [bookmarked, setBookmarked] = useState(false);
 

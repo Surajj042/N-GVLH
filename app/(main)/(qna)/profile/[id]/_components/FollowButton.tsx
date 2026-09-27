@@ -6,11 +6,9 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 const FollowButton = ({
-  studentId,
   teacherClerkId,
   following,
 }: {
-  studentId: string;
   teacherClerkId: string;
   following: boolean;
 }) => {
@@ -27,11 +25,8 @@ const FollowButton = ({
       // Perform the backend operation
       await followForum({
         teacherClerkId: teacherClerkId,
-        studentId: studentId,
         path: pathname,
       });
-
-      // Optionally, you can handle success if needed
     } catch (error) {
       // Handle errors if needed
       console.error("Error following forum:", error);

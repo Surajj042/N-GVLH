@@ -21,7 +21,6 @@ export type GetTeacherCourses = {
 };
 
 export interface GetChapterProps {
-  userId: string;
   courseId: string;
   chapterId: string;
 }
@@ -35,7 +34,7 @@ export interface SidebarLink {
   imgURL: string;
   route: string;
   label: string;
-  subLinks?: Sublink[]
+  subLinks?: SubLink[]
 }
 
 export interface Job {

@@ -117,9 +117,15 @@ export const formatAndDivideNumber = (number: number): string => {
   }
 };
 
-export function getJoinedDate(date: Date): string {
-  const month = date.toLocaleString("default", { month: "long" });
-  const year = date.getFullYear();
+export function getJoinedDate(date?: Date | string | null): string {
+  if (!date) return "";
+
+  const parsed = date instanceof Date ? date : new Date(date);
+
+  if (Number.isNaN(parsed.getTime())) return "";
+
+  const month = parsed.toLocaleString("default", { month: "long" });
+  const year = parsed.getFullYear();
 
   // Create joined date string (ex. "September 2023")
   const joinedDate = `${month} ${year}`;

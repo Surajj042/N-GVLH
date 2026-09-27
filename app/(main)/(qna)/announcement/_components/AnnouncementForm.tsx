@@ -3,7 +3,6 @@
 import { Button } from "@/components/ui/button";
 import { addAnnouncement } from "@/lib/actions/forum.action";
 import { Editor } from "@/components/editor";
-import { useAuth } from "@clerk/nextjs";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Callout, TextField } from "@radix-ui/themes";
 import { useRouter } from "next/navigation";
@@ -20,7 +19,6 @@ const announcementSchema = z.object({
 type AnnouncementFormType = z.infer<typeof announcementSchema>;
 
 const AnnouncementForm = ({ announcement }: { announcement?: string }) => {
-  const { userId } = useAuth();
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -36,9 +34,7 @@ const AnnouncementForm = ({ announcement }: { announcement?: string }) => {
 
   const onSubmit = handleSubmit(async (data) => {
     try {
-      if (!userId) return;
       await addAnnouncement({
-        userId: userId as string,
         title: data.title,
         description: data.description,
       });

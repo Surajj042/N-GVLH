@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars */
 "use client";
 
 import { useTheme } from "@/components/theme-provider";
@@ -31,11 +30,10 @@ import { toast } from "../ui/use-toast";
 
 interface Props {
   type?: string;
-  mongoUserId: string;
   questionDetails?: string;
 }
 
-const Question = ({ mongoUserId, type, questionDetails }: Props) => {
+const Question = ({ type, questionDetails }: Props) => {
   const editorRef = useRef(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
@@ -76,7 +74,6 @@ const Question = ({ mongoUserId, type, questionDetails }: Props) => {
           title: values.title,
           content: values.explanation,
           tags: values.tags,
-          author: JSON.parse(mongoUserId),
           path: pathname,
         });
         router.back();

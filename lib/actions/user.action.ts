@@ -1,47 +1,65 @@
 "use server";
 
+import { currentUser } from "@clerk/nextjs/server";
+import mongoose from "mongoose";
+import { revalidatePath } from "next/cache";
+
 import Answer from "@/database/answer.modal";
+import Forum from "@/database/forum.modal";
+import Interaction from "@/database/interaction.modal";
 import Question from "@/database/question.modal";
 import Tag from "@/database/tag.modal";
 import User from "@/database/user.modal";
-import Interaction from "@/database/interaction.modal";
-import Forum from "@/database/forum.modal";
 import { BadgeCriteriaType } from "@/types";
-import mongoose from "mongoose";
-import { revalidatePath } from "next/cache";
-import { connectToDatabase } from "../mongoose";
-import { assignBadges } from "../utils";
-import { currentUser } from "@clerk/nextjs/server";
+import { canManageUser, requireAdmin, requireUser } from "@/lib/authz";
+import { connectToDatabase } from "@/lib/mongoose";
+import { clampPagination, escapeRegExp, safePath } from "@/lib/security";
+import { assignBadges } from "@/lib/utils";
 import {
-  CreateUserParams,
-  DeleteUserParams,
+  PUBLIC_PROFILE_SELECT,
+  PUBLIC_USER_SELECT,
+} from "@/lib/projection";
+import { ProfileSchema } from "@/lib/validations";
+import { createForum } from "./forum.action";
+import {
   GetAllUsersParams,
   GetSavedQuestionsParams,
-  GetUserByIdParams,
   GetUserStatsParams,
   ToggleSaveQuestionParams,
   UpdateUserParams,
 } from "./shared.types";
-import { createForum } from "./forum.action";
+
+const PROFILE_EDITABLE_FIELDS = [
+  "name",
+  "username",
+  "bio",
+  "location",
+  "portfolioWebsite",
+] as const;
 
 export async function getAllUsers(params: GetAllUsersParams) {
   try {
     await connectToDatabase();
 
-    const { page = 1, pageSize = 10, filter, searchQuery } = params;
+    const { filter, searchQuery } = params;
+    const { page, pageSize } = clampPagination(params);
 
     const query: mongoose.QueryFilter<typeof User> = {};
 
     const skipAmount = (page - 1) * pageSize;
 
-    if (searchQuery) {
+    if (searchQuery?.trim()) {
+      const safeSearch = new RegExp(
+        escapeRegExp(searchQuery.trim().slice(0, 100)),
+        "i",
+      );
       query.$or = [
-        { name: { $regex: new RegExp(searchQuery, "i") } },
-        { username: { $regex: new RegExp(searchQuery, "i") } },
+        { name: { $regex: safeSearch } },
+        { username: { $regex: safeSearch } },
       ];
     }
 
-    let sortOptions = {};
+    let sortOptions: Record<string, 1 | -1> = { joinedAt: -1 };
 
     switch (filter) {
       case "new_users":
@@ -61,13 +79,15 @@ export async function getAllUsers(params: GetAllUsersParams) {
     }
 
     const users = await User.find(query)
+      .select(PUBLIC_USER_SELECT)
       .skip(skipAmount)
       .limit(pageSize)
-      .sort(sortOptions);
+      .sort(sortOptions)
+      .lean();
 
     const totalUsers = await User.countDocuments(query);
 
-    const hasNext = totalUsers > skipAmount + pageSize;
+    const hasNext = totalUsers > skipAmount + users.length;
 
     return { users, hasNext };
   } catch (error) {
@@ -76,37 +96,49 @@ export async function getAllUsers(params: GetAllUsersParams) {
   }
 }
 
-export async function getUserById(params: any) {
+export async function getUserById(params: { userId: string }) {
   try {
     await connectToDatabase();
 
     const { userId } = params;
 
-    const user = await User?.findOne({ clerkId: userId }).lean();
+    if (!userId) return null;
 
-    return user;
+    return await User.findOne({ clerkId: userId })
+      .select(PUBLIC_USER_SELECT)
+      .lean();
   } catch (error) {
     console.log("Database connnection failed: ", error);
   }
 }
 
-export async function createUser(userData: CreateUserParams) {
-  try {
-    await connectToDatabase();
+export async function getMySavedQuestionIds(questionId: string) {
+  const actor = await requireUser();
 
-    const newUser = await User.create(userData);
-
-    return newUser;
-  } catch (error) {
-    console.log(error);
+  if (!mongoose.isValidObjectId(questionId)) {
+    return false;
   }
+
+  await connectToDatabase();
+
+  return User.exists({
+    _id: actor._id,
+    saved: questionId,
+  }).then(Boolean);
 }
 
-/**
- * Self-healing sync between Clerk and MongoDB. Creates the MongoDB user
- * record if it does not exist yet (e.g. the Clerk `user.created` webhook
- * was not delivered in local development). Safe to call on every request.
- */
+export async function getMyProfile() {
+  const actor = await requireUser();
+
+  await connectToDatabase();
+
+  return User.findById(actor._id)
+    .select(
+      "_id clerkId name username picture bio location portfolioWebsite role",
+    )
+    .lean();
+}
+
 export async function syncClerkUser() {
   try {
     const clerkUser = await currentUser();
@@ -138,7 +170,6 @@ export async function syncClerkUser() {
         picture: imageUrl,
       });
     } catch (error: any) {
-      // Duplicate key (username/email already taken) — retry with a unique suffix
       if (error?.code === 11000) {
         return await User.create({
           clerkId: id,
@@ -158,25 +189,49 @@ export async function syncClerkUser() {
 
 export async function updateUser(params: UpdateUserParams) {
   try {
+    const actor = await requireUser();
+
     await connectToDatabase();
 
     const { clerkId, updateData, path } = params;
 
-    await User.findOneAndUpdate({ clerkId }, updateData, {
-      new: true,
-    });
+    if (!canManageUser(actor, clerkId)) {
+      throw new Error("Forbidden");
+    }
 
-    revalidatePath(path);
+    const update: Record<string, unknown> = {};
+
+    for (const field of PROFILE_EDITABLE_FIELDS) {
+      const value = (updateData as Record<string, unknown>)?.[field];
+      if (value !== undefined) {
+        update[field] = value;
+      }
+    }
+
+    if (Object.keys(update).length === 0) {
+      throw new Error("No updatable fields provided");
+    }
+
+    const validated = ProfileSchema.partial().parse(update);
+
+    await User.findOneAndUpdate({ clerkId }, { $set: validated }, { new: true });
+
+    revalidatePath(safePath(path));
   } catch (error) {
     console.log(error);
+    throw error;
   }
 }
 
-export async function deleteUser(params: DeleteUserParams) {
+export async function deleteUser({ clerkId }: { clerkId: string }) {
   try {
+    const actor = await requireAdmin();
+
     await connectToDatabase();
 
-    const { clerkId } = params;
+    if (actor.clerkId === clerkId) {
+      throw new Error("You cannot delete your own account");
+    }
 
     const user = await User.findOneAndDelete({ clerkId });
 
@@ -184,16 +239,14 @@ export async function deleteUser(params: DeleteUserParams) {
       throw new Error("User not found!");
     }
 
-    // Collect user's question IDs to clean Tag references
     const userQuestionIds = await Question.distinct("_id", { author: user._id });
+    const userAnswerIds = await Answer.distinct("_id", { author: user._id });
 
-    // Delete all user-related data
     await Question.deleteMany({ author: user._id });
     await Answer.deleteMany({ author: user._id });
     await Interaction.deleteMany({ user: user._id });
     await Forum.deleteMany({ teacherId: user._id });
 
-    // Clean up Tag references to deleted questions
     if (userQuestionIds.length > 0) {
       await Tag.updateMany(
         { questions: { $in: userQuestionIds } },
@@ -201,43 +254,61 @@ export async function deleteUser(params: DeleteUserParams) {
       );
     }
 
+    if (userAnswerIds.length > 0) {
+      await Question.updateMany(
+        { answers: { $in: userAnswerIds } },
+        { $pull: { answers: { $in: userAnswerIds } } },
+      );
+      await Tag.updateMany(
+        { answers: { $in: userAnswerIds } },
+        { $pull: { answers: { $in: userAnswerIds } } },
+      );
+    }
+
     return user;
   } catch (error) {
     console.log(error);
+    throw error;
   }
 }
 
 export async function toggleSaveQuestion(params: ToggleSaveQuestionParams) {
   try {
+    const user = await requireUser();
+
     await connectToDatabase();
 
-    const { userId, questionId, path } = params;
+    const { questionId, path } = params;
 
-    const user = await User.findById(userId);
-
-    if (!user) {
-      throw Error("User not found!");
+    if (!mongoose.isValidObjectId(questionId)) {
+      throw new Error("Question not found!");
     }
 
-    const isQuestionSaved = user.saved.includes(questionId);
+    const questionExists = await Question.exists({ _id: questionId });
+
+    if (!questionExists) {
+      throw new Error("Question not found!");
+    }
+
+    const isQuestionSaved = (user.saved ?? []).some(
+      (id) => String(id) === questionId,
+    );
 
     if (isQuestionSaved) {
-      // remove question from saved
       await User.findByIdAndUpdate(
-        userId,
+        user._id,
         { $pull: { saved: questionId } },
         { new: true },
       );
     } else {
-      // add question to saved
       await User.findByIdAndUpdate(
-        userId,
+        user._id,
         { $addToSet: { saved: questionId } },
         { new: true },
       );
     }
 
-    revalidatePath(path);
+    revalidatePath(safePath(path));
   } catch (error) {
     console.log(error);
     throw error;
@@ -246,17 +317,24 @@ export async function toggleSaveQuestion(params: ToggleSaveQuestionParams) {
 
 export async function getSavedQuestions(params: GetSavedQuestionsParams) {
   try {
+    const actor = await requireUser();
+
     await connectToDatabase();
 
-    const { clerkId, searchQuery, filter, page = 1, pageSize = 10 } = params;
+    const { searchQuery, filter } = params;
+    const { page, pageSize } = clampPagination(params);
 
     const skipAmount = (page - 1) * pageSize;
 
-    const query: mongoose.QueryFilter<typeof Question> = searchQuery
-      ? { title: { $regex: new RegExp(searchQuery, "i") } }
+    const query: mongoose.QueryFilter<typeof Question> = searchQuery?.trim()
+      ? {
+          title: {
+            $regex: new RegExp(escapeRegExp(searchQuery.trim().slice(0, 100)), "i"),
+          },
+        }
       : {};
 
-    let sortOptions = {};
+    let sortOptions: Record<string, 1 | -1> = { createdAt: -1 };
 
     switch (filter) {
       case "most_recent":
@@ -281,12 +359,11 @@ export async function getSavedQuestions(params: GetSavedQuestionsParams) {
         break;
     }
 
-    const user = await User.findOne({ clerkId }).populate({
+    const user = await User.findOne({ clerkId: actor.clerkId }).populate({
       path: "saved",
       match: query,
       options: {
         skip: skipAmount,
-        // pageSize+1 to find if there are other questions and compute hasNext based on that
         limit: pageSize + 1,
         sort: sortOptions,
       },
@@ -296,77 +373,51 @@ export async function getSavedQuestions(params: GetSavedQuestionsParams) {
       ],
     });
 
-    const hasNext = user.saved.length > pageSize;
-
     if (!user) {
       throw new Error("User not found");
     }
 
-    const savedQuestions = user.saved;
+    const hasNext = user.saved.length > pageSize;
+
+    const savedQuestions = user.saved.slice(0, pageSize);
 
     return { questions: savedQuestions, hasNext };
-    //
   } catch (error) {
-    //
     console.log(error);
 
     throw error;
   }
 }
 
-export async function getUserInfo(params: GetUserByIdParams) {
+export async function getUserInfo(params: { userId: string }) {
   try {
     await connectToDatabase();
 
     const { userId } = params;
 
-    const user = await User.findOne({ clerkId: userId }).lean();
+    const user = await User.findOne({ clerkId: userId })
+      .select(PUBLIC_PROFILE_SELECT)
+      .lean();
 
     if (!user) {
       return;
-      // throw new Error("User not found!");
     }
 
     const totalQuestions = await Question.countDocuments({ author: user._id });
     const totalAnswers = await Answer.countDocuments({ author: user._id });
     const [questionUpvotes] = await Question.aggregate([
       { $match: { author: user._id } },
-      {
-        $project: {
-          _id: 0,
-          upvotes: { $size: "$upvotes" },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalUpvotes: { $sum: "$upvotes" },
-        },
-      },
+      { $project: { _id: 0, upvotes: { $size: "$upvotes" } } },
+      { $group: { _id: null, totalUpvotes: { $sum: "$upvotes" } } },
     ]);
     const [answerUpvotes] = await Answer.aggregate([
       { $match: { author: user._id } },
-      {
-        $project: {
-          _id: 0,
-          upvotes: { $size: "$upvotes" },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalUpvotes: { $sum: "$upvotes" },
-        },
-      },
+      { $project: { _id: 0, upvotes: { $size: "$upvotes" } } },
+      { $group: { _id: null, totalUpvotes: { $sum: "$upvotes" } } },
     ]);
     const [questionViews] = await Question.aggregate([
       { $match: { author: user._id } },
-      {
-        $group: {
-          _id: null,
-          totalViews: { $sum: "$views" },
-        },
-      },
+      { $group: { _id: null, totalViews: { $sum: "$views" } } },
     ]);
 
     const criteria = [
@@ -405,7 +456,8 @@ export async function getUserQuestions(params: GetUserStatsParams) {
   try {
     await connectToDatabase();
 
-    const { userId, page = 1, pageSize = 10 } = params;
+    const { userId } = params;
+    const { page, pageSize } = clampPagination(params);
 
     const skipAmount = (page - 1) * pageSize;
 
@@ -431,7 +483,8 @@ export async function getUserAnswers(params: GetUserStatsParams) {
   try {
     await connectToDatabase();
 
-    const { userId, page = 1, pageSize = 10 } = params;
+    const { userId } = params;
+    const { page, pageSize } = clampPagination(params);
 
     const skipAmount = (page - 1) * pageSize;
 
@@ -458,37 +511,36 @@ export async function changeRole({
   newRole,
 }: {
   clerkId: string;
-  newRole: "STUDENT" | "TEACHER";
+  newRole: "STUDENT" | "TEACHER" | "ADMIN";
 }) {
   try {
-    // Validate the new role
-    const validRoles = ["STUDENT", "TEACHER"];
-    if (!validRoles.includes(newRole)) {
+    await requireAdmin();
+
+    if (!["STUDENT", "TEACHER", "ADMIN"].includes(newRole)) {
       throw new Error("Invalid role specified.");
     }
 
     await connectToDatabase();
 
-    // Find the user by ID and update the role
     const user = await User.findOneAndUpdate(
       { clerkId },
       { role: newRole, updatedAt: Date.now() },
       { new: true, runValidators: true },
     );
 
-    if(user.role === "TEACHER"){
-      await createForum({teacherId: user.clerkId});
-    }
-
     if (!user) {
       throw new Error("User not found.");
     }
 
+    if (newRole === "TEACHER") {
+      await createForum({ teacherId: user.clerkId });
+    }
   } catch (error) {
     console.error(`Error updating user role: ${error}`);
     throw error;
   }
 }
+
 export async function changePicture({
   clerkId,
   picture,
@@ -497,7 +549,18 @@ export async function changePicture({
   picture: string;
 }) {
   try {
-    // Find the user by ID and update the role
+    const actor = await requireUser();
+
+    if (!canManageUser(actor, clerkId)) {
+      throw new Error("Forbidden");
+    }
+
+    if (typeof picture !== "string" || !/^https?:\/\//i.test(picture)) {
+      throw new Error("Invalid picture URL.");
+    }
+
+    await connectToDatabase();
+
     const user = await User.findOneAndUpdate(
       { clerkId },
       { picture, updatedAt: Date.now() },
@@ -508,7 +571,7 @@ export async function changePicture({
       throw new Error("User not found.");
     }
   } catch (error) {
-    console.error(`Error updating user role: ${error}`);
+    console.error(`Error updating user picture: ${error}`);
     throw error;
   }
 }
@@ -519,15 +582,14 @@ export async function isProfileTeacher({
   userId: string;
 }): Promise<boolean> {
   await connectToDatabase();
-  const teacher = await User?.findOne({
+  const teacher = await User.findOne({
     clerkId: userId,
     role: "TEACHER",
-  });
-  if (teacher) {
-    return true;
-  }
-  return false;
+  }).lean();
+
+  return Boolean(teacher);
 }
+
 export async function isTeacher({
   userId,
 }: {
@@ -535,13 +597,10 @@ export async function isTeacher({
 }): Promise<boolean> {
   if (userId === null || userId === undefined) return false;
   await connectToDatabase();
-  const teacher = await User?.findOne({
+  const teacher = await User.findOne({
     clerkId: userId,
     role: "TEACHER",
-  });
+  }).lean();
 
-  if (teacher) {
-    return true;
-  }
-  return false;
+  return Boolean(teacher);
 }

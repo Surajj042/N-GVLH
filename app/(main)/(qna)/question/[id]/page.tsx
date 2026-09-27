@@ -9,7 +9,7 @@ import {
   getQuestionById,
   getQuestionByIdAndIncreaseViews,
 } from "@/lib/actions/question.action";
-import { getUserById } from "@/lib/actions/user.action";
+import { getMySavedQuestionIds, getUserById } from "@/lib/actions/user.action";
 import { formatAndDivideNumber, getTimestamp } from "@/lib/utils";
 import { URLProps } from "@/types";
 import { auth } from "@clerk/nextjs/server";
@@ -21,11 +21,6 @@ const QuestionDetailPage = async ({ params, searchParams }: any) => {
   const { id } = await params;
   const resolvedSearchParams = await searchParams;
 
-  let mongoUser;
-
-  if (clerkId) {
-    mongoUser = await getUserById({ userId: clerkId });
-  }
   const question = await getQuestionByIdAndIncreaseViews({
     questionId: id,
   });
@@ -40,6 +35,13 @@ const QuestionDetailPage = async ({ params, searchParams }: any) => {
       />
     );
   }
+
+  const [mongoUser, hasSaved] = clerkId
+    ? await Promise.all([
+        getUserById({ userId: clerkId }),
+        getMySavedQuestionIds(id),
+      ])
+    : [null, false];
 
   return (
     <>
@@ -70,7 +72,7 @@ const QuestionDetailPage = async ({ params, searchParams }: any) => {
               hasupVoted={!!mongoUser && question.upvotes.includes(mongoUser._id)}
               downvotes={question.downvotes.length}
               hasdownVoted={!!mongoUser && question.downvotes.includes(mongoUser._id)}
-              hasSaved={!!mongoUser && mongoUser.saved.includes(question._id)}
+              hasSaved={hasSaved}
             />
           </div>
         </div>
@@ -135,8 +137,7 @@ const QuestionDetailPage = async ({ params, searchParams }: any) => {
 
       <Answer
         question={question.content}
-        questionId={JSON.stringify(question._id)}
-        authorId={JSON.stringify(mongoUser?._id)}
+        questionId={question._id}
       />
     </>
   );

@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { formatAndDivideNumber, getTimestamp } from "@/lib/utils";
-import parse from "html-react-parser";
+import { sanitizeHtml } from "@/lib/sanitize";
 import EditDeleteAction from "../shared/EditDeleteAction";
 import Metric from "../shared/Metric";
 
@@ -45,7 +45,12 @@ const AnswerCard = ({
               <h3 className="sm:h3-semibold base-semibold text-dark200_light900 line-clamp-2 flex-1">
                 {question.title}
               </h3>
-              {parse(answer.slice(0, 230))}
+              <div
+                className="text-sm leading-snug"
+                dangerouslySetInnerHTML={{
+                  __html: sanitizeHtml(answer).slice(0, 230),
+                }}
+              />
             </div>
             {showActionButtons && (
               <EditDeleteAction type="Answer" itemId={JSON.stringify(_id)} />

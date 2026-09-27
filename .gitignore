@@ -23,7 +23,6 @@
 # git
 /.git/
 /.kilo/
-/app/api
 
 # debug
 npm-debug.log*

@@ -1,5 +1,5 @@
 import { getCourseWithChaptersAndProgress } from "@/lib/actions/course.action";
-import { getProgress } from "@/lib/actions/progress.action";
+import { getMyProgress } from "@/lib/actions/progress.action";
 import { auth } from "@clerk/nextjs/server";
 import { Metadata } from "next";
 import { redirect } from "next/navigation";
@@ -80,8 +80,7 @@ const CourseLayout = async ({
     return redirect("/get-started");
   }
 
-  // @ts-ignore
-  const progressCount: number = await getProgress(userId, courseId);
+  const progressCount = (await getMyProgress(courseId)) ?? 0;
 
   return (
     <div className="h-full">

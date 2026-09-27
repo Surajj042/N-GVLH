@@ -58,6 +58,8 @@ const Profile = async ({ params, searchParams }: URLProps) => {
     });
   }
 
+  const joinedDate = getJoinedDate(userInfo.user.joinedAt);
+
   return (
     <>
       <div className="flex flex-col-reverse items-start justify-between sm:flex-row">
@@ -94,10 +96,12 @@ const Profile = async ({ params, searchParams }: URLProps) => {
                 />
               )}
 
-              <ProfileLink
-                imgUrl="/qna/calendar.svg"
-                title={`Joined ${getJoinedDate(userInfo.user.joinedAt)}`}
-              />
+              {joinedDate && (
+                <ProfileLink
+                  imgUrl="/qna/calendar.svg"
+                  title={`Joined ${joinedDate}`}
+                />
+              )}
             </div>
 
             {userInfo.user.bio && (
@@ -118,7 +122,6 @@ const Profile = async ({ params, searchParams }: URLProps) => {
           )}
           {teacher && (
             <FollowButton
-              studentId={clerkId ?? ""}
               teacherClerkId={userInfo.user.clerkId}
               following={following!}
             />

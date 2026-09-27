@@ -1,5 +1,5 @@
 import Profile from "@/components/forms/Profile";
-import { getUserById } from "@/lib/actions/user.action";
+import { getMyProfile } from "@/lib/actions/user.action";
 import { ParamsProps } from "@/types";
 import { auth } from "@clerk/nextjs/server";
 import { Metadata } from "next";
@@ -25,7 +25,9 @@ const EditProfile = async ({ params }: ParamsProps) => {
 
   if (!userId) redirect("/sign-in");
 
-  const mongoUser = await getUserById({ userId });
+  const mongoUser = await getMyProfile();
+
+  if (!mongoUser) redirect("/get-started");
 
   return (
     <>

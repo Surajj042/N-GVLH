@@ -1,19 +1,26 @@
 "use server";
 
+import Mux from "@mux/mux-node";
+import mongoose from "mongoose";
+
 import Attachment from "@/database/attachment.modal";
 import Chapter from "@/database/chapter.modal";
 import Course from "@/database/course.modal";
 import MuxData from "@/database/muxdata.modal";
 import Purchase from "@/database/purchase.modal";
 import UserProgress from "@/database/userprogress.modal";
+import { getCurrentUser } from "@/lib/authz";
+import { connectToDatabase } from "@/lib/mongoose";
 import { GetChapterProps } from "@/types";
-import Mux from "@mux/mux-node";
-import { connectToDatabase } from "../mongoose";
 
-const { video } = new Mux({
-  tokenId: process.env.MUX_TOKEN_ID,
-  tokenSecret: process.env.MUX_TOKEN_SECRET,
-});
+const getMux = () => {
+  const tokenId = process.env.MUX_TOKEN_ID;
+  const tokenSecret = process.env.MUX_TOKEN_SECRET;
+
+  if (!tokenId || !tokenSecret) return null;
+
+  return new Mux({ tokenId, tokenSecret });
+};
 
 export const getChapterNameById = async ({
   chapterId,
@@ -21,103 +28,140 @@ export const getChapterNameById = async ({
   chapterId: string;
 }) => {
   try {
+    if (!mongoose.isValidObjectId(chapterId)) return null;
+
+    const user = await getCurrentUser();
+
     await connectToDatabase();
-    const chapterName = await Chapter.findById(chapterId);
-    return chapterName;
+
+    const chapter = await Chapter.findById(chapterId)
+      .select("title isFree courseId isPublished")
+      .lean();
+
+    if (!chapter || !chapter.isPublished) return null;
+
+    if (chapter.isFree) return { title: chapter.title };
+
+    if (!user) return null;
+
+    const [course, purchase] = await Promise.all([
+      Course.findById(chapter.courseId).select("userId").lean(),
+      Purchase.findOne({ userId: user.clerkId, courseId: chapter.courseId }).lean(),
+    ]);
+
+    if (!course) return null;
+
+    if (purchase || course.userId === user.clerkId) {
+      return { title: chapter.title };
+    }
+
+    return null;
   } catch (error) {
     console.log("CHAPTER METADATA FETCHING ERROR ", error);
+    return null;
   }
 };
 
 export const getChapter = async ({
-  userId,
   courseId,
   chapterId,
 }: GetChapterProps) => {
   try {
-    await connectToDatabase();
-    // Fetch purchase
-    const purchase = await Purchase.findOne({
-      userId,
-      courseId,
-    });
-
-    // Fetch course
-    const course = await Course.findOne({
-      _id: courseId,
-      isPublished: true,
-    }).select("price");
-
-    // Fetch chapter
-    const chapter = await Chapter.findOne({
-      _id: chapterId,
-      isPublished: true,
-    });
-
-    if (!chapter || !course) {
+    if (!mongoose.isValidObjectId(courseId) || !mongoose.isValidObjectId(chapterId)) {
       throw new Error("Chapter or course not found");
     }
 
-    let muxData = null;
-    let attachments = [];
-    let nextChapter = null;
-    let isDeleted = true;
+    const user = await getCurrentUser();
 
-    if (purchase) {
-      // Fetch attachments
-      attachments = await Attachment.find({
-        courseId,
-      });
+    await connectToDatabase();
+
+    const course = await Course.findOne({
+      _id: courseId,
+      isPublished: true,
+    }).select("price title description imageUrl userId");
+
+    if (!course) {
+      throw new Error("Chapter or course not found");
     }
 
-    if (chapter.isFree || purchase) {
-      // Fetch muxData
-      muxData = await MuxData.findOne({
-        chapterId,
-      });
+    const chapter = await Chapter.findOne({
+      _id: chapterId,
+      courseId,
+      isPublished: true,
+    });
 
-      if (muxData?.assetId) {
+    if (!chapter) {
+      throw new Error("Chapter or course not found");
+    }
+
+    const purchase = user
+      ? await Purchase.findOne({ userId: user.clerkId, courseId })
+      : null;
+
+    const isOwner = Boolean(user && course.userId === user.clerkId);
+    const hasAccess = Boolean(chapter.isFree || purchase || isOwner);
+
+    if (!hasAccess) {
+      return {
+        chapter: null,
+        course: course.toObject(),
+        muxData: null,
+        attachments: [],
+        nextChapter: null,
+        userProgress: null,
+        purchase: null,
+        isLocked: true,
+        isDeleted: true,
+      };
+    }
+
+    const muxData = await MuxData.findOne({ chapterId });
+
+    let isDeleted = false;
+
+    if (muxData?.assetId) {
+      const mux = getMux();
+
+      if (mux) {
         try {
-          await video.assets.retrieve(muxData.assetId);
+          await mux.video.assets.retrieve(muxData.assetId);
           isDeleted = false;
-        } catch (error: any) {
+        } catch {
           isDeleted = true;
         }
       } else {
-        // youtube-only or no muxData -> not deleted, allow playback via youtubeUrl
-        isDeleted = false;
+        isDeleted = true;
       }
-      // if (is) {
-      //   console.log("hello");
+    }
 
-      //   isDeleted = false;
-      // } else {
-      //   console.log("bye");
-      // }
-
-      // Fetch next chapter
-      nextChapter = await Chapter.findOne({
+    const [attachments, nextChapter] = await Promise.all([
+      Attachment.find({ courseId }),
+      Chapter.findOne({
         courseId,
         isPublished: true,
         position: { $gt: chapter.position },
-      }).sort({ position: "asc" });
-    }
+      })
+        .sort({ position: "asc" })
+        .select("title position"),
+    ]);
 
-    // Fetch user progress
-    const userProgress = await UserProgress.findOne({
-      userId,
-      chapterId,
-    });
+    const userProgress = user
+      ? await UserProgress.findOne({
+          userId: user.clerkId,
+          chapterId,
+        })
+      : null;
 
     return {
       chapter: chapter.toObject(),
       course: course.toObject(),
       muxData: muxData ? muxData.toObject() : null,
-      attachments: attachments.map((attachment: any) => attachment.toObject()),
+      attachments: attachments.map((attachment) => attachment.toObject()),
       nextChapter: nextChapter ? nextChapter.toObject() : null,
       userProgress: userProgress ? userProgress.toObject() : null,
       purchase: purchase ? purchase.toObject() : null,
-      isDeleted
+      isLocked: false,
+      isDeleted,
     };
   } catch (error) {
     console.log(error);
@@ -129,6 +173,8 @@ export const getChapter = async ({
       nextChapter: null,
       userProgress: null,
       purchase: null,
+      isLocked: false,
+      isDeleted: true,
     };
   }
 };

@@ -1,12 +1,8 @@
-"use server";
-import { Schema } from "mongoose";
-
-import { IUser } from "@/mongodb";
+import { IUser } from "@/database/user.modal";
 
 export interface CreateAnswerParams {
   content: string;
-  author: string; // User ID
-  question: string; // Question ID
+  question: string;
   path: string;
 }
 
@@ -19,9 +15,6 @@ export interface GetAnswersParams {
 
 export interface AnswerVoteParams {
   answerId: string;
-  userId: string;
-  hasupVoted: boolean;
-  hasdownVoted: boolean;
   path: string;
 }
 
@@ -42,11 +35,6 @@ export interface RecommendedParams {
   searchQuery?: string;
 }
 
-export interface ViewQuestionParams {
-  questionId: string;
-  userId: string | undefined;
-}
-
 export interface JobFilterParams {
   query: string;
   page: string;
@@ -63,7 +51,6 @@ export interface CreateQuestionParams {
   title: string;
   content: string;
   tags: string[];
-  author: Schema.Types.ObjectId | IUser;
   path: string;
 }
 
@@ -73,9 +60,6 @@ export interface GetQuestionByIdParams {
 
 export interface QuestionVoteParams {
   questionId: string;
-  userId: string;
-  hasupVoted: boolean;
-  hasdownVoted: boolean;
   path: string;
 }
 
@@ -113,23 +97,11 @@ export interface GetTopInteractedTagsParams {
   limit?: number;
 }
 
-export interface CreateUserParams {
-  clerkId: string;
-  name: string;
-  username: string;
-  email: string;
-  picture: string;
-}
-
-export interface GetUserByIdParams {
-  userId: string;
-}
-
 export interface GetAllUsersParams {
   page?: number;
   pageSize?: number;
   filter?: string;
-  searchQuery?: string; // Add searchQuery parameter
+  searchQuery?: string;
 }
 
 export interface UpdateUserParams {
@@ -139,13 +111,11 @@ export interface UpdateUserParams {
 }
 
 export interface ToggleSaveQuestionParams {
-  userId: string;
   questionId: string;
   path: string;
 }
 
 export interface GetSavedQuestionsParams {
-  clerkId: string;
   page?: number;
   pageSize?: number;
   filter?: string;
@@ -156,8 +126,4 @@ export interface GetUserStatsParams {
   userId: string;
   page?: number;
   pageSize?: number;
-}
-
-export interface DeleteUserParams {
-  clerkId: string;
 }

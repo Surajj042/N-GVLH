@@ -26,10 +26,9 @@ import { toast } from "../ui/use-toast";
 interface Props {
   question: string;
   questionId: string;
-  authorId: string;
 }
 
-const Answer = ({ question, questionId, authorId }: Props) => {
+const Answer = ({ question, questionId }: Props) => {
   // Answer Component
   const pathname = usePathname();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -49,8 +48,7 @@ const Answer = ({ question, questionId, authorId }: Props) => {
     try {
       await createAnswer({
         content: values.answer,
-        author: JSON.parse(authorId),
-        question: JSON.parse(questionId),
+        question: questionId,
         path: pathname,
       });
 
@@ -77,30 +75,27 @@ const Answer = ({ question, questionId, authorId }: Props) => {
   };
 
   const generateAIAnswer = async () => {
-    // console.log("Error");
-
-    if (!authorId) return;
-
     setIsSubmittingAI(true);
 
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_APP_URL}/api/gemini`,
-        { method: "POST", body: JSON.stringify({ question }) },
-      );
+      const response = await fetch("/api/gemini", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question }),
+      });
 
-      console.log(response);
-      
+      if (!response.ok) {
+        throw new Error("Generation failed");
+      }
 
       const aiAnswer = await response.json();
 
-      // let formattedAnswer = aiAnswer.reply.replace(/\n/g, "<br/>");
-      let formattedAnswer = aiAnswer.text;
+      const formattedAnswer = aiAnswer.text;
 
       if (editorRef.current) {
         const editor = editorRef.current as any;
 
-        editor.setContent(marked(formattedAnswer));
+        editor.setContent(marked.parse(formattedAnswer ?? ""));
       }
       return toast({
         title: "Answer Generated Successfully",

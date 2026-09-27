@@ -33,7 +33,6 @@ const Collection = async ({ searchParams }: SearchParamsProps) => {
   if (!clerkId) redirect("/get-started");
 
   const { questions, hasNext } = await getSavedQuestions({
-    clerkId,
     searchQuery: resolvedSearchParams.q,
     page: resolvedSearchParams.page ? +resolvedSearchParams.page : 1,
     filter: resolvedSearchParams.filter,

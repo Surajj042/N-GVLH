@@ -30,15 +30,18 @@ const Edit = async ({ params }: ParamsProps) => {
   const mongoUser = await getUserById({ userId });
   const result = await getQuestionById({ questionId: id });
 
+  if (!result) redirect("/all-questions");
+
+  const isOwner =
+    mongoUser && String(result.author?._id ?? result.author) === String(mongoUser._id);
+
+  if (!isOwner) redirect(`/question/${id}`);
+
   return (
     <>
       <h1 className="h1-bold text-dark100_light900">Edit Question</h1>
       <div className="mt-9">
-        <Question
-          type="Edit"
-          mongoUserId={JSON.stringify(mongoUser._id)}
-          questionDetails={JSON.stringify(result)}
-        />
+        <Question type="Edit" questionDetails={JSON.stringify(result)} />
       </div>
     </>
   );

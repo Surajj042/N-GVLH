@@ -3,7 +3,7 @@
 import React, { useEffect } from "react";
 
 import Prism from "prismjs";
-import parse from "html-react-parser";
+import { sanitizeHtml } from "@/lib/sanitize";
 
 import "prismjs/components/prism-python";
 import "prismjs/components/prism-java";
@@ -37,7 +37,12 @@ const ParseHTML = ({ data }: Props) => {
     Prism.highlightAll();
   }, []);
 
-  return <div className="markdown w-full min-w-full text-meeting">{parse(data)}</div>;
+  return (
+    <div
+      className="markdown w-full min-w-full text-meeting"
+      dangerouslySetInnerHTML={{ __html: sanitizeHtml(data) }}
+    />
+  );
 };
 
 export default ParseHTML;

@@ -23,7 +23,7 @@ N-GVLH is an innovative educational platform designed to connect students and te
 
 * **Secure Payments:** Enroll in courses seamlessly and securely using Stripe's trusted payment processing system.
 
-* **Community Q&A:** Ask questions, get answers from teachers and peers, and leverage the power of AI-generated responses through OpenAI integration.
+* **Community Q&A:** Ask questions, get answers from teachers and peers, and leverage the power of AI-generated responses through Google Gemini integration.
 
 * **Search & Discovery:** Easily find the courses and teachers you're looking for using our powerful search functionality.
 
@@ -67,7 +67,7 @@ N-GVLH is an innovative educational platform designed to connect students and te
 
 3. **Environment Variables:**
 
-   * **Important:** The `api` folder and `.env` file are hidden for security reasons. Create these and set the necessary environment variables (e.g., MongoDB connection string, Stripe secret key, etc.).
+   * **Important:** The `.env` file is excluded from version control for security reasons. Copy `.env.example` to `.env.local` and set the necessary environment variables (e.g., MongoDB connection string, Stripe secret key, Clerk keys, Mux keys, UploadThing keys, and Gemini API key). The `app/api` folder is tracked in version control; it contains no secrets.
 
 4. **Local Development:**
 
@@ -82,10 +82,11 @@ N-GVLH is an innovative educational platform designed to connect students and te
 
 
 * **`public`:** Static assets (images, fonts, etc.).
-* **`src`:** Source code for the application.
+* **`app`:** Next.js App Router source code.
     * **`components`:** Reusable UI components.
-    * **`api`:** Serverless functions.
-    * **`utils`:** Helper functions and utilities.
+    * **`api`:** Route handlers (serverless functions) for courses, webhooks, uploads, and AI.
+    * **`lib`:** Server actions, authorization helpers, validation, and sanitization utilities.
+    * **`database`:** Mongoose models.
 <br>
 
 

@@ -37,16 +37,20 @@ export const CourseSidebar = async ({
         )}
       </div>
       <div className="flex w-full flex-col">
-        {course.chapters.map((chapter: any) => (
-          <CourseSidebarItem
-            key={chapter._id}
-            id={chapter._id}
-            label={chapter.title}
-            isCompleted={!!chapter.userProgress?.["isCompleted"]}
-            courseId={course._id}
-            isLocked={!chapter.isFree && !purchase}
-          />
-        ))}
+        {course.chapters.map((chapter: any) => {
+          const isLocked = !chapter.isFree && !purchase;
+
+          return (
+            <CourseSidebarItem
+              key={chapter._id}
+              id={chapter._id}
+              label={isLocked ? "Locked chapter" : chapter.title}
+              isCompleted={!!chapter.userProgress?.["isCompleted"]}
+              courseId={course._id}
+              isLocked={isLocked}
+            />
+          );
+        })}
       </div>
     </div>
   );
