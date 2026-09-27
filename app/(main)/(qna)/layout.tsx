@@ -3,6 +3,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Metadata } from "next";
 import { PropsWithChildren } from "react";
 
+export const dynamic = "force-dynamic";
+
 const Layout = ({ children }: PropsWithChildren) => {
   return (
     <main className="relative dark:bg-slate-900">
